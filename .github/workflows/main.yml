@@ -1,70 +1,23 @@
 name: Build enigma-rs
-
-on:
-  workflow_dispatch:      # 允许在 Actions 页面手动触发
-  push:
-    branches: [ main ]    # 推送到 main 时自动编译
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        include:
-          - name: "CPU only"
-            features: "--no-default-features"
-            artifact: enigma-rs-cpu
-          - name: "Default (CUDA + WGPU + CPU)"
-            features: ""
-            artifact: enigma-rs-full
-
     steps:
-      # 1. 拉取代码
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. 安装 Rust 工具链（Windows MSVC 目标）
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: i686-pc-windows-msvc
 
-      # 3. 解决 MSVC 构建环境（GitHub 运行器默认不一定带完整 MSVC）
-      - name: Install msvc-kit & Setup MSVC
-        run: |
-          cargo install msvc-kit
-          msvc-kit download
-          msvc-kit setup --script --shell powershell | Invoke-Expression
-
-      # 4. 缓存 Cargo 依赖，加速后续编译
-      - name: Cache Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      # 5. 执行编译
       - name: Build
-        run: cargo build --release ${{ matrix.features }}
+        run: cargo build --release --target i686-pc-windows-msvc --no-default-features
 
-      # 6. 收集产物（exe + runtime 文件夹）
-      - name: Prepare Artifact
-        shell: pwsh
-        run: |
-          $dist = "dist-${{ matrix.artifact }}"
-          New-Item -ItemType Directory -Force -Path $dist | Out-Null
-          Copy-Item target\release\enigma-rs.exe $dist\
-          if (Test-Path target\release\runtime) {
-            Copy-Item -Recurse target\release\runtime $dist\runtime
-          }
-          Compress-Archive -Path $dist\* -DestinationPath "${{ matrix.artifact }}.zip"
-
-      # 7. 上传 ZIP 到 Actions 页面，供下载
-      - name: Upload Artifact
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}.zip
+          name: enigma-rs-cpu
+          path: target/i686-pc-windows-msvc/release/enigma-rs.exe
